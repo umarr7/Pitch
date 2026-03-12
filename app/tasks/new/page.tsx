@@ -12,7 +12,6 @@ interface Department {
   code: string;
 }
 
-// Define the validation schema matching the backend
 const createTaskSchema = z.object({
   title: z.string().min(1, 'Title is required').max(200, 'Title matches max length of 200'),
   description: z.string().min(1, 'Description is required').max(2000, 'Description matches max length of 2000'),
@@ -21,7 +20,7 @@ const createTaskSchema = z.object({
   urgency: z.enum(['LOW', 'MEDIUM', 'HIGH']),
   rewardPoints: z.number().int().min(1, 'Points must be at least 1').max(100, 'Points cannot exceed 100'),
   locationText: z.string().optional(),
-  imageUrl: z.string().url('Invalid URL').optional().or(z.literal('')),
+  imageUrl: z.string().optional(),
 });
 
 type TaskFormData = z.infer<typeof createTaskSchema>;
@@ -43,6 +42,7 @@ export default function NewTaskPage() {
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof TaskFormData, string>>>({});
   const [generalError, setGeneralError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -61,9 +61,9 @@ export default function NewTaskPage() {
   }, [user, loading, router]);
 
   useEffect(() => {
-     if (user?.department?.id) {
-         setFormData(prev => ({ ...prev, departmentId: user.department!.id }));
-     }
+    if (user?.department?.id) {
+      setFormData((prev) => ({ ...prev, departmentId: user.department!.id }));
+    }
   }, [user]);
 
   const fetchDepartments = async () => {
@@ -73,7 +73,7 @@ export default function NewTaskPage() {
         const data = await res.json();
         setDepartments(data);
         if (!formData.departmentId && data.length > 0 && !user?.department?.id) {
-          setFormData(prev => ({ ...prev, departmentId: data[0].id }));
+          setFormData((prev) => ({ ...prev, departmentId: data[0].id }));
         }
       }
     } catch (error) {
@@ -103,21 +103,20 @@ export default function NewTaskPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setGeneralError('');
-    
+
     if (!validateForm()) {
-        setGeneralError('Please fix the errors below.');
-        return;
+      setGeneralError('Please fix the errors below.');
+      return;
     }
 
     setSubmitting(true);
 
     try {
       const token = localStorage.getItem('token');
-      // Format data for API (clean up empty strings for optionals)
       const dataToSend = {
-          ...formData,
-          imageUrl: formData.imageUrl === '' ? undefined : formData.imageUrl,
-          locationText: formData.locationText === '' ? undefined : formData.locationText
+        ...formData,
+        imageUrl: formData.imageUrl === '' ? undefined : formData.imageUrl,
+        locationText: formData.locationText === '' ? undefined : formData.locationText,
       };
 
       const res = await fetch('/api/tasks', {
@@ -135,18 +134,16 @@ export default function NewTaskPage() {
       } else {
         const errorData = await res.json();
         if (errorData.details) {
-            // Map server-side Zod errors if returned in expected format
-            const errors: Partial<Record<keyof TaskFormData, string>> = {};
-             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            errorData.details.forEach((err: any) => {
-                 if (err.path[0]) {
-                    errors[err.path[0] as keyof TaskFormData] = err.message;
-                  }
-            });
-             setFieldErrors(errors);
-             setGeneralError('Invalid input. Please check the fields.');
+          const errors: Partial<Record<keyof TaskFormData, string>> = {};
+          errorData.details.forEach((err: any) => {
+            if (err.path[0]) {
+              errors[err.path[0] as keyof TaskFormData] = err.message;
+            }
+          });
+          setFieldErrors(errors);
+          setGeneralError('Invalid input. Please check the fields.');
         } else {
-            setGeneralError(errorData.error || 'Failed to create task');
+          setGeneralError(errorData.error || 'Failed to create task');
         }
       }
     } catch (error) {
@@ -156,57 +153,62 @@ export default function NewTaskPage() {
     }
   };
 
+  const inputBase = 'block w-full rounded-xl border bg-white px-4 py-2.5 text-slate-900 shadow-sm transition focus:outline-none focus:ring-2 sm:text-sm';
+  const inputError = 'border-red-300 focus:border-red-500 focus:ring-red-500/20';
+  const inputNormal = 'border-slate-300 focus:border-primary-500 focus:ring-primary-500/20';
+
+  const inputClassName = (fieldName: keyof TaskFormData) =>
+    `${inputBase} ${fieldErrors[fieldName] ? inputError : inputNormal}`;
+
   if (loading || !user) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+        <div className="h-12 w-12 animate-spin rounded-full border-2 border-slate-200 border-t-primary-600" />
       </div>
     );
   }
 
-  const inputClassName = (fieldName: keyof TaskFormData) => `
-     mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 text-gray-900 
-     ${fieldErrors[fieldName] ? 'border-red-300 focus:ring-red-500 focus:border-red-500' : 'border-gray-300'}
-  `;
-
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-slate-50">
       <Navbar />
-      <div className="max-w-3xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          <h1 className="text-3xl font-bold text-gray-900 mb-6">Create New Task</h1>
+      <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6 lg:px-8">
+        <div className="px-0 sm:px-0">
+          <h1 className="mb-6 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+            Create New Task
+          </h1>
 
-          <form onSubmit={handleSubmit} className="bg-white shadow rounded-lg p-6">
+          <form
+            onSubmit={handleSubmit}
+            className="animate-fade-in-up rounded-2xl border border-slate-200/80 bg-white p-4 shadow-card sm:p-6 lg:p-8"
+          >
             {generalError && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
+              <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
                 {generalError}
               </div>
             )}
 
-            <div className="space-y-6">
+            <div className="space-y-5 sm:space-y-6">
               <div>
-                <label htmlFor="title" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="title" className="mb-1 block text-sm font-medium text-slate-700">
                   Title *
                 </label>
                 <input
                   type="text"
                   id="title"
-                  // removed required to test custom validation
                   maxLength={200}
                   className={inputClassName('title')}
                   value={formData.title}
                   onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                 />
-                 {fieldErrors.title && <p className="mt-1 text-sm text-red-600">{fieldErrors.title}</p>}
+                {fieldErrors.title && <p className="mt-1 text-sm text-red-600">{fieldErrors.title}</p>}
               </div>
 
               <div>
-                <label htmlFor="description" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="description" className="mb-1 block text-sm font-medium text-slate-700">
                   Description *
                 </label>
                 <textarea
                   id="description"
-                  // removed required
                   rows={6}
                   maxLength={2000}
                   className={inputClassName('description')}
@@ -216,9 +218,9 @@ export default function NewTaskPage() {
                 {fieldErrors.description && <p className="mt-1 text-sm text-red-600">{fieldErrors.description}</p>}
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                  <label htmlFor="category" className="block text-sm font-medium text-gray-700">
+                  <label htmlFor="category" className="mb-1 block text-sm font-medium text-slate-700">
                     Category *
                   </label>
                   <select
@@ -226,7 +228,7 @@ export default function NewTaskPage() {
                     required
                     className={inputClassName('category')}
                     value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value as any })}
+                    onChange={(e) => setFormData({ ...formData, category: e.target.value as TaskFormData['category'] })}
                   >
                     <option value="ERRAND">Errand</option>
                     <option value="LOST">Lost & Found</option>
@@ -234,11 +236,10 @@ export default function NewTaskPage() {
                     <option value="TUTORING">Tutoring</option>
                     <option value="OTHER">Other</option>
                   </select>
-                   {fieldErrors.category && <p className="mt-1 text-sm text-red-600">{fieldErrors.category}</p>}
+                  {fieldErrors.category && <p className="mt-1 text-sm text-red-600">{fieldErrors.category}</p>}
                 </div>
-
                 <div>
-                  <label htmlFor="departmentId" className="block text-sm font-medium text-gray-700">
+                  <label htmlFor="departmentId" className="mb-1 block text-sm font-medium text-slate-700">
                     Department *
                   </label>
                   <select
@@ -254,13 +255,13 @@ export default function NewTaskPage() {
                       </option>
                     ))}
                   </select>
-                   {fieldErrors.departmentId && <p className="mt-1 text-sm text-red-600">{fieldErrors.departmentId}</p>}
+                  {fieldErrors.departmentId && <p className="mt-1 text-sm text-red-600">{fieldErrors.departmentId}</p>}
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                  <label htmlFor="urgency" className="block text-sm font-medium text-gray-700">
+                  <label htmlFor="urgency" className="mb-1 block text-sm font-medium text-slate-700">
                     Urgency *
                   </label>
                   <select
@@ -268,17 +269,16 @@ export default function NewTaskPage() {
                     required
                     className={inputClassName('urgency')}
                     value={formData.urgency}
-                    onChange={(e) => setFormData({ ...formData, urgency: e.target.value as any })}
+                    onChange={(e) => setFormData({ ...formData, urgency: e.target.value as TaskFormData['urgency'] })}
                   >
                     <option value="LOW">Low</option>
                     <option value="MEDIUM">Medium</option>
                     <option value="HIGH">High</option>
                   </select>
-                   {fieldErrors.urgency && <p className="mt-1 text-sm text-red-600">{fieldErrors.urgency}</p>}
+                  {fieldErrors.urgency && <p className="mt-1 text-sm text-red-600">{fieldErrors.urgency}</p>}
                 </div>
-
                 <div>
-                  <label htmlFor="rewardPoints" className="block text-sm font-medium text-gray-700">
+                  <label htmlFor="rewardPoints" className="mb-1 block text-sm font-medium text-slate-700">
                     Reward Points *
                   </label>
                   <input
@@ -291,16 +291,14 @@ export default function NewTaskPage() {
                     value={formData.rewardPoints}
                     onChange={(e) => setFormData({ ...formData, rewardPoints: parseInt(e.target.value) || 0 })}
                   />
-                  <p className="mt-1 text-sm text-gray-500">
-                    You will pay 10 points to post this task
-                  </p>
-                   {fieldErrors.rewardPoints && <p className="mt-1 text-sm text-red-600">{fieldErrors.rewardPoints}</p>}
+                  <p className="mt-1 text-sm text-slate-500">You will pay 10 points to post this task</p>
+                  {fieldErrors.rewardPoints && <p className="mt-1 text-sm text-red-600">{fieldErrors.rewardPoints}</p>}
                 </div>
               </div>
 
               <div>
-                <label htmlFor="locationText" className="block text-sm font-medium text-gray-700">
-                  Location (Optional)
+                <label htmlFor="locationText" className="mb-1 block text-sm font-medium text-slate-700">
+                  Location <span className="text-slate-400">(optional)</span>
                 </label>
                 <input
                   type="text"
@@ -309,36 +307,81 @@ export default function NewTaskPage() {
                   value={formData.locationText}
                   onChange={(e) => setFormData({ ...formData, locationText: e.target.value })}
                 />
-                 {fieldErrors.locationText && <p className="mt-1 text-sm text-red-600">{fieldErrors.locationText}</p>}
+                {fieldErrors.locationText && <p className="mt-1 text-sm text-red-600">{fieldErrors.locationText}</p>}
               </div>
 
               <div>
-                <label htmlFor="imageUrl" className="block text-sm font-medium text-gray-700">
-                  Image URL (Optional)
+                <label htmlFor="image" className="mb-1 block text-sm font-medium text-slate-700">
+                  Image <span className="text-slate-400">(optional)</span>
                 </label>
                 <input
-                  type="url"
-                  id="imageUrl"
-                  className={inputClassName('imageUrl')}
-                  value={formData.imageUrl}
-                  onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
+                  id="image"
+                  type="file"
+                  accept="image/*"
+                  className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-200"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setUploadingImage(true);
+                    setFieldErrors((prev) => ({ ...prev, imageUrl: undefined }));
+                    try {
+                      const form = new FormData();
+                      form.append('file', file);
+                      const res = await fetch('/api/upload', {
+                        method: 'POST',
+                        body: form,
+                      });
+                      if (!res.ok) {
+                        const err = await res.json().catch(() => ({}));
+                        setFieldErrors((prev) => ({
+                          ...prev,
+                          imageUrl: err.error || 'Failed to upload image',
+                        }));
+                        return;
+                      }
+                      const { url } = await res.json();
+                      setFormData((prev) => ({ ...prev, imageUrl: url }));
+                    } catch {
+                      setFieldErrors((prev) => ({
+                        ...prev,
+                        imageUrl: 'Failed to upload image',
+                      }));
+                    } finally {
+                      setUploadingImage(false);
+                    }
+                  }}
                 />
-                 {fieldErrors.imageUrl && <p className="mt-1 text-sm text-red-600">{fieldErrors.imageUrl}</p>}
+                {uploadingImage && (
+                  <p className="mt-1 text-xs text-slate-500">Uploading image...</p>
+                )}
+                {formData.imageUrl && !fieldErrors.imageUrl && (
+                  <div className="mt-2">
+                    <p className="mb-1 text-xs font-medium text-slate-500">Preview</p>
+                    <img
+                      src={formData.imageUrl}
+                      alt="Preview"
+                      className="max-h-40 rounded-lg border border-slate-200 object-cover"
+                    />
+                  </div>
+                )}
+                {fieldErrors.imageUrl && (
+                  <p className="mt-1 text-sm text-red-600">{fieldErrors.imageUrl}</p>
+                )}
               </div>
             </div>
 
-            <div className="mt-6 flex justify-end space-x-3">
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end sm:gap-3">
               <button
                 type="button"
                 onClick={() => router.back()}
-                className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                className="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={submitting}
-                className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 disabled:opacity-50"
+                className="rounded-xl bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:bg-primary-700 disabled:opacity-50 btn-active"
               >
                 {submitting ? 'Creating...' : 'Create Task'}
               </button>

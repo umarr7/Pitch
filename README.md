@@ -277,10 +277,19 @@ Key models:
 - Check `DATABASE_URL` in `.env`
 - Verify database exists
 
-### Socket.IO Connection Issues
-- Ensure custom server is running (`npm run dev`)
-- Check `NEXT_PUBLIC_APP_URL` matches your server URL
-- Verify CORS settings in `lib/socket.ts`
+### Socket.IO / Real-time Chat Not Connecting
+Real-time only works when the **custom server** is used. Do **not** run `next dev`; use:
+
+```bash
+npm run dev
+```
+
+This runs `server.ts`, which starts both Next.js and Socket.IO on the same HTTP server. If you run `next dev`, Socket.IO never starts and the client will stay on "Connecting…" (chat still works via REST polling).
+
+- **Server path**: Socket.IO is served at `/socket.io` (default). The server skips this path so Next.js does not handle it.
+- **Check terminal**: When a client connects you should see `[Server] Request to /socket.io` and `[Socket] Connection attempt` in the server log. If you never see these, the app is not using the custom server.
+- **Browser console**: On connection failure you’ll see `[Chat] Socket connect_error: <message>`; the UI will switch to "Chat (polling)" and messages will work via REST.
+- **Env**: Ensure `NEXT_PUBLIC_APP_URL` (e.g. `http://localhost:3000`) matches the URL you open in the browser.
 
 ### Authentication Issues
 - Clear browser localStorage

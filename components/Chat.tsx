@@ -24,71 +24,20 @@ interface ChatProps {
   acceptorId: string;
 }
 
+const POLL_INTERVAL_MS = 3000;
+const SOCKET_TIMEOUT_MS = 4000;
+
 export default function Chat({ taskId, requesterId, acceptorId }: ChatProps) {
   const { user } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [socket, setSocket] = useState<Socket | null>(null);
   const [connected, setConnected] = useState(false);
+  const [useFallback, setUseFallback] = useState(false);
+  const [sendLoading, setSendLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!user) return;
-
-    const token = localStorage.getItem('token');
-    if (!token) return;
-
-    // Initialize socket connection - use full origin with protocol
-    const newSocket = io(window.location.origin, {
-      auth: { token },
-      path: '/api/socket',
-      transports: ['websocket', 'polling'], // Try websocket first
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-    });
-
-    newSocket.on('connect', () => {
-      console.log('✅ Socket connected!', newSocket.id);
-      setConnected(true);
-      newSocket.emit('join-task', taskId);
-    });
-
-    newSocket.on('disconnect', () => {
-      console.log('❌ Socket disconnected');
-      setConnected(false);
-    });
-
-    newSocket.on('connect_error', (error) => {
-      console.error('🔴 Socket connection error:', error.message);
-    });
-
-    newSocket.on('joined-task', () => {
-      console.log('✅ Joined task room:', taskId);
-      fetchMessages();
-    });
-
-    newSocket.on('new-message', (message: Message) => {
-      console.log('📩 New message received:', message);
-      setMessages((prev) => [...prev, message]);
-      scrollToBottom();
-    });
-
-    newSocket.on('error', (error: { message: string }) => {
-      console.error('Socket error:', error);
-    });
-
-    setSocket(newSocket);
-
-    return () => {
-      newSocket.emit('leave-task', taskId);
-      newSocket.close();
-    };
-  }, [taskId, user]);
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [autoScroll, setAutoScroll] = useState(true);
 
   const fetchMessages = async () => {
     try {
@@ -96,7 +45,6 @@ export default function Chat({ taskId, requesterId, acceptorId }: ChatProps) {
       const res = await fetch(`/api/messages?taskId=${taskId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-
       if (res.ok) {
         const data = await res.json();
         setMessages(data);
@@ -107,91 +55,221 @@ export default function Chat({ taskId, requesterId, acceptorId }: ChatProps) {
   };
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (!autoScroll) return;
+    if (containerRef.current) {
+      containerRef.current.scrollTo({
+        top: containerRef.current.scrollHeight,
+        behavior: 'smooth',
+      });
+    }
   };
 
-  const handleSendMessage = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newMessage.trim() || !socket || !connected) return;
+  useEffect(() => {
+    if (!user) return;
 
-    const otherPartyId = user?.id === requesterId ? acceptorId : requesterId;
+    const token = localStorage.getItem('token');
+    if (!token) return;
 
-    socket.emit('send-message', {
-      taskId,
-      receiverId: otherPartyId,
-      content: newMessage.trim(),
+    fetchMessages();
+
+    const socketUrl =
+      typeof window !== 'undefined'
+        ? (process.env.NEXT_PUBLIC_APP_URL || window.location.origin)
+        : 'http://localhost:3000';
+
+    const newSocket = io(socketUrl, {
+      auth: { token },
+      path: '/socket.io',
+      transports: ['polling', 'websocket'],
+      reconnection: true,
+      reconnectionAttempts: 3,
+      reconnectionDelay: 1000,
+      timeout: 5000,
     });
 
-    setNewMessage('');
+    const timeoutId = setTimeout(() => {
+      if (!newSocket.connected) {
+        console.warn('Socket did not connect in time, using REST fallback');
+        setUseFallback(true);
+        newSocket.close();
+      }
+    }, SOCKET_TIMEOUT_MS);
+
+    newSocket.on('connect', () => {
+      clearTimeout(timeoutId);
+      setConnected(true);
+      setUseFallback(false);
+      newSocket.emit('join-task', taskId);
+    });
+
+    newSocket.on('joined-task', () => {
+      fetchMessages();
+    });
+
+    newSocket.on('new-message', (message: Message) => {
+      setMessages((prev) => [...prev, message]);
+    });
+
+    newSocket.on('disconnect', () => {
+      setConnected(false);
+    });
+
+    newSocket.on('connect_error', (err) => {
+      console.warn('[Chat] Socket connect_error:', err.message);
+      clearTimeout(timeoutId);
+      setUseFallback(true);
+    });
+
+    setSocket(newSocket);
+
+    return () => {
+      clearTimeout(timeoutId);
+      newSocket.emit('leave-task', taskId);
+      newSocket.close();
+    };
+  }, [taskId, user?.id]);
+
+  useEffect(() => {
+    if (connected) return;
+    const interval = setInterval(fetchMessages, POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [connected, taskId]);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  const handleScroll = () => {
+    const container = containerRef.current;
+    if (!container) return;
+    const { scrollTop, scrollHeight, clientHeight } = container;
+    const distanceFromBottom = scrollHeight - (scrollTop + clientHeight);
+    // If user is within 40px of the bottom, keep auto-scroll enabled
+    setAutoScroll(distanceFromBottom < 40);
+  };
+
+  const canSend = !!user;
+  const otherPartyId = user?.id === requesterId ? acceptorId : requesterId;
+
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const content = newMessage.trim();
+    if (!content) return;
+
+    if (connected && socket) {
+      socket.emit('send-message', {
+        taskId,
+        receiverId: otherPartyId,
+        content,
+      });
+      setNewMessage('');
+      return;
+    }
+
+    setSendLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          taskId,
+          receiverId: otherPartyId,
+          content,
+        }),
+      });
+      if (res.ok) {
+        setNewMessage('');
+        await fetchMessages();
+      }
+    } finally {
+      setSendLoading(false);
+    }
   };
 
   const isRequester = user?.id === requesterId;
   const otherPartyName = isRequester
-    ? messages.find((m) => m.senderId === acceptorId)?.sender.profile.firstName || 'Acceptor'
-    : messages.find((m) => m.senderId === requesterId)?.sender.profile.firstName || 'Requester';
+    ? messages.find((m) => m.senderId === acceptorId)?.sender?.profile?.firstName || 'Acceptor'
+    : messages.find((m) => m.senderId === requesterId)?.sender?.profile?.firstName || 'Requester';
+
+  const statusText = connected
+    ? 'Realtime'
+    : useFallback
+      ? 'Chat (polling)'
+      : 'Connecting… (you can still send messages)';
+
+  const statusColor = connected ? 'text-emerald-600' : useFallback ? 'text-slate-500' : 'text-amber-600';
 
   return (
-    <div className="bg-white shadow rounded-lg">
-      <div className="px-4 py-3 border-b border-gray-200">
-        <h3 className="text-lg font-semibold text-gray-900">Chat</h3>
-        <p className="text-sm text-gray-500">Chatting with {otherPartyName}</p>
-        {!connected && (
-          <p className="text-xs text-yellow-600 mt-1">Connecting...</p>
-        )}
+    <div className="animate-fade-in-up overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-card">
+      <div className="border-b border-slate-100 px-4 py-3 sm:px-5">
+        <h3 className="text-lg font-semibold text-slate-900">Chat</h3>
+        <p className="text-sm text-slate-500">Chatting with {otherPartyName}</p>
+        <p className={`mt-1 text-xs font-medium ${statusColor}`}>{statusText}</p>
       </div>
 
-      <div className="h-96 overflow-y-auto p-4 space-y-4">
+      <div
+        ref={containerRef}
+        className="h-72 overflow-y-auto p-4 sm:h-96 sm:p-5"
+        onScroll={handleScroll}
+      >
         {messages.length === 0 ? (
-          <div className="text-center text-gray-500 py-8">
-            No messages yet. Start the conversation!
+          <div className="flex h-full flex-col items-center justify-center py-8 text-center text-slate-500">
+            <p>No messages yet.</p>
+            <p className="mt-1 text-sm">Start the conversation!</p>
           </div>
         ) : (
-          messages.map((message) => {
-            const isOwnMessage = message.senderId === user?.id;
-            return (
-              <div
-                key={message.id}
-                className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}
-              >
+          <div className="space-y-4">
+            {messages.map((message) => {
+              const isOwnMessage = message.senderId === user?.id;
+              return (
                 <div
-                  className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                    isOwnMessage
-                      ? 'bg-primary-600 text-white'
-                      : 'bg-gray-200 text-gray-900'
-                  }`}
+                  key={message.id}
+                  className={`flex animate-fade-in ${isOwnMessage ? 'justify-end' : 'justify-start'}`}
                 >
-                  <p className="text-sm">{message.content}</p>
-                  <p
-                    className={`text-xs mt-1 ${
-                      isOwnMessage ? 'text-primary-100' : 'text-gray-500'
+                  <div
+                    className={`max-w-[85%] sm:max-w-md rounded-2xl px-4 py-2.5 shadow-card ${
+                      isOwnMessage
+                        ? 'rounded-br-md bg-primary-600 text-white'
+                        : 'rounded-bl-md bg-slate-100 text-slate-900'
                     }`}
                   >
-                    {new Date(message.createdAt).toLocaleTimeString()}
-                  </p>
+                    <p className="text-sm leading-relaxed">{message.content}</p>
+                    <p
+                      className={`mt-1 text-xs ${
+                        isOwnMessage ? 'text-primary-100' : 'text-slate-500'
+                      }`}
+                    >
+                      {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            );
-          })
+              );
+            })}
+            <div ref={messagesEndRef} />
+          </div>
         )}
-        <div ref={messagesEndRef} />
       </div>
 
-      <form onSubmit={handleSendMessage} className="px-4 py-3 border-t border-gray-200">
-        <div className="flex space-x-2">
+      <form onSubmit={handleSendMessage} className="border-t border-slate-100 px-4 py-3 sm:px-5">
+        <div className="flex gap-2">
           <input
             type="text"
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
             placeholder="Type a message..."
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-            disabled={!connected}
+            className="flex-1 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-slate-900 placeholder-slate-400 shadow-sm transition focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 sm:text-sm"
+            disabled={!canSend}
           />
           <button
             type="submit"
-            disabled={!connected || !newMessage.trim()}
-            className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={!canSend || !newMessage.trim() || sendLoading}
+            className="shrink-0 rounded-xl bg-primary-600 px-4 py-2.5 font-medium text-white shadow-soft transition hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed btn-active sm:px-5"
           >
-            Send
+            {sendLoading ? 'Sending…' : 'Send'}
           </button>
         </div>
       </form>

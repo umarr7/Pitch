@@ -56,26 +56,40 @@ export const POST = withAuth(async (req: any, { params }: { params: { id: string
     //   );
     // }
 
-    const updatedTask = await prisma.task.update({
-      where: { id: params.id },
-      data: {
-        status: 'ACCEPTED',
-        acceptorId: userId,
-        acceptedAt: new Date(),
-      },
-      include: {
-        requester: {
-          include: {
-            profile: true,
-          },
+    const updatedTask = await prisma.$transaction(async (tx) => {
+      const taskAfterAccept = await tx.task.update({
+        where: { id: params.id },
+        data: {
+          status: 'ACCEPTED',
+          acceptorId: userId,
+          acceptedAt: new Date(),
         },
-        acceptor: {
-          include: {
-            profile: true,
+        include: {
+          requester: {
+            include: {
+              profile: true,
+            },
           },
+          acceptor: {
+            include: {
+              profile: true,
+            },
+          },
+          department: true,
         },
-        department: true,
-      },
+      });
+
+      // Send a system message so the requester clearly sees the task was accepted
+      await tx.message.create({
+        data: {
+          taskId: taskAfterAccept.id,
+          senderId: userId,
+          receiverId: taskAfterAccept.requesterId,
+          content: `✅ I have accepted your task \"${taskAfterAccept.title}\". Let's coordinate in chat!`,
+        },
+      });
+
+      return taskAfterAccept;
     });
 
     return NextResponse.json(updatedTask);

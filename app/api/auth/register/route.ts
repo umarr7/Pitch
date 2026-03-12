@@ -9,8 +9,8 @@ const registerSchema = z.object({
   password: z.string().min(8),
   firstName: z.string().min(1),
   lastName: z.string().min(1),
-  studentId: z.string().optional(),
-  phone: z.string().optional(),
+  studentId: z.string().optional().transform(v => v === '' ? undefined : v),
+  phone: z.string().optional().transform(v => v === '' ? undefined : v),
   departmentId: z.string(),
 });
 

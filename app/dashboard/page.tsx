@@ -27,7 +27,7 @@ interface Task {
 }
 
 export default function DashboardPage() {
-  const { user, loading } = useAuth();
+  const { user, loading, refreshUser } = useAuth();
   const router = useRouter();
   const [myTasks, setMyTasks] = useState<Task[]>([]);
   const [acceptedTasks, setAcceptedTasks] = useState<Task[]>([]);
@@ -40,9 +40,16 @@ export default function DashboardPage() {
     }
 
     if (user) {
-      fetchTasks();
+      const loadDashboard = async () => {
+        // Refresh to ensure points/level are up to date when navigating here
+        if (refreshUser) {
+          await refreshUser();
+        }
+        await fetchTasks();
+      };
+      loadDashboard();
     }
-  }, [user, loading, router]);
+  }, [user?.id, loading, router, refreshUser]);
 
   const fetchTasks = async () => {
     try {
@@ -72,190 +79,175 @@ export default function DashboardPage() {
     }
   };
 
-  if (loading || !user) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
-      </div>
-    );
-  }
-
   const getLevelColor = (level: string) => {
     switch (level) {
-      case 'ELITE': return 'text-purple-600';
-      case 'GOLD': return 'text-yellow-600';
-      case 'SILVER': return 'text-gray-600';
+      case 'ELITE': return 'text-violet-600';
+      case 'GOLD': return 'text-amber-600';
+      case 'SILVER': return 'text-slate-600';
       case 'BRONZE': return 'text-orange-600';
-      default: return 'text-gray-400';
+      default: return 'text-slate-400';
     }
   };
 
   const getUrgencyColor = (urgency: string) => {
     switch (urgency) {
       case 'HIGH': return 'bg-red-100 text-red-800';
-      case 'MEDIUM': return 'bg-yellow-100 text-yellow-800';
-      default: return 'bg-green-100 text-green-800';
+      case 'MEDIUM': return 'bg-amber-100 text-amber-800';
+      default: return 'bg-emerald-100 text-emerald-800';
     }
   };
 
+  const statCards = [
+    { label: 'Points', value: user?.points ?? 0, icon: '💰', delay: 0 },
+    { label: 'Reputation', value: user?.reputation ?? 0, icon: '⭐', delay: 1 },
+    { label: 'Level', value: user?.level ?? 'NEW', valueClass: getLevelColor(user?.level ?? ''), icon: '🏆', delay: 2 },
+    { label: 'Active Tasks', value: acceptedTasks.length, icon: '📋', delay: 3 },
+  ];
+
+  if (loading || !user) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-12 w-12 animate-spin rounded-full border-2 border-slate-200 border-t-primary-600" />
+          <p className="text-sm font-medium text-slate-500">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-slate-50">
       <Navbar />
-      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-            <p className="mt-2 text-gray-600">Welcome back, {user.profile?.firstName}!</p>
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+        <div className="px-0 sm:px-0">
+          <div className="mb-8 animate-fade-in-up">
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+              Dashboard
+            </h1>
+            <p className="mt-1 text-slate-600">
+              Welcome back, {user.profile?.firstName}!
+            </p>
           </div>
 
-          {/* Stats Cards */}
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <div className="text-2xl">💰</div>
+          {/* Stats */}
+          <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {statCards.map((stat) => (
+              <div
+                key={stat.label}
+                className="card-hover animate-fade-in-up rounded-2xl border border-slate-200/80 bg-white p-5 shadow-card"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-2xl">
+                    {stat.icon}
                   </div>
-                  <div className="ml-5 w-0 flex-1">
-                    <dl>
-                      <dt className="text-sm font-medium text-gray-500 truncate">Points</dt>
-                      <dd className="text-lg font-medium text-gray-900">{user.points}</dd>
-                    </dl>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <div className="text-2xl">⭐</div>
-                  </div>
-                  <div className="ml-5 w-0 flex-1">
-                    <dl>
-                      <dt className="text-sm font-medium text-gray-500 truncate">Reputation</dt>
-                      <dd className="text-lg font-medium text-gray-900">{user.reputation}</dd>
-                    </dl>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-slate-500">{stat.label}</p>
+                    <p className={`text-lg font-semibold text-slate-900 ${stat.valueClass ?? ''}`}>
+                      {stat.value}
+                    </p>
                   </div>
                 </div>
               </div>
-            </div>
-
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <div className="text-2xl">🏆</div>
-                  </div>
-                  <div className="ml-5 w-0 flex-1">
-                    <dl>
-                      <dt className="text-sm font-medium text-gray-500 truncate">Level</dt>
-                      <dd className={`text-lg font-medium ${getLevelColor(user.level)}`}>
-                        {user.level}
-                      </dd>
-                    </dl>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <div className="text-2xl">📋</div>
-                  </div>
-                  <div className="ml-5 w-0 flex-1">
-                    <dl>
-                      <dt className="text-sm font-medium text-gray-500 truncate">Active Tasks</dt>
-                      <dd className="text-lg font-medium text-gray-900">
-                        {acceptedTasks.length}
-                      </dd>
-                    </dl>
-                  </div>
-                </div>
-              </div>
-            </div>
+            ))}
           </div>
 
-          {/* Active Tasks */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white shadow rounded-lg">
-              <div className="px-4 py-5 sm:p-6">
-                <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">
-                  My Posted Tasks
-                </h3>
+          {/* Task lists */}
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <div className="animate-fade-in-up rounded-2xl border border-slate-200/80 bg-white shadow-card">
+              <div className="border-b border-slate-100 px-4 py-4 sm:px-6 sm:py-5">
+                <h2 className="text-lg font-semibold text-slate-900">My Posted Tasks</h2>
+              </div>
+              <div className="p-4 sm:p-6">
                 {loadingTasks ? (
-                  <div className="text-center py-4">Loading...</div>
-                ) : myTasks.length === 0 ? (
-                  <div className="text-center py-4 text-gray-500">
-                    No active tasks. <Link href="/tasks/new" className="text-primary-600 hover:text-primary-500">Post one now</Link>
+                  <div className="flex justify-center py-8">
+                    <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-primary-600" />
                   </div>
+                ) : myTasks.length === 0 ? (
+                  <p className="py-6 text-center text-slate-500">
+                    No active tasks.{' '}
+                    <Link href="/tasks/new" className="font-medium text-primary-600 hover:text-primary-700">
+                      Post one now
+                    </Link>
+                  </p>
                 ) : (
-                  <div className="space-y-4">
+                  <ul className="space-y-4">
                     {myTasks.slice(0, 5).map((task) => (
-                      <div key={task.id} className="border-b border-gray-200 pb-4 last:border-0">
-                        <div className="flex justify-between items-start">
-                          <div className="flex-1">
-                            <Link href={`/tasks/${task.id}`} className="font-medium text-gray-900 hover:text-primary-600">
+                      <li key={task.id} className="border-b border-slate-100 pb-4 last:border-0 last:pb-0">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0 flex-1">
+                            <Link
+                              href={`/tasks/${task.id}`}
+                              className="font-medium text-slate-900 transition-colors hover:text-primary-600"
+                            >
                               {task.title}
                             </Link>
-                            <p className="text-sm text-gray-500 mt-1">{task.description.substring(0, 100)}...</p>
-                            <div className="mt-2 flex items-center space-x-2">
-                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getUrgencyColor(task.urgency)}`}>
+                            <p className="mt-0.5 line-clamp-2 text-sm text-slate-500">
+                              {task.description.substring(0, 100)}...
+                            </p>
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                              <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${getUrgencyColor(task.urgency)}`}>
                                 {task.urgency}
                               </span>
-                              <span className="text-sm text-gray-500">{task.rewardPoints} pts</span>
+                              <span className="text-sm text-slate-500">{task.rewardPoints} pts</span>
                             </div>
                           </div>
-                          <span className="ml-4 text-sm text-gray-500">{task.status}</span>
+                          <span className="shrink-0 text-sm text-slate-500 sm:ml-4">{task.status}</span>
                         </div>
-                      </div>
+                      </li>
                     ))}
-                  </div>
+                  </ul>
                 )}
               </div>
             </div>
 
-            <div className="bg-white shadow rounded-lg">
-              <div className="px-4 py-5 sm:p-6">
-                <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">
-                  Accepted Tasks
-                </h3>
+            <div className="animate-fade-in-up rounded-2xl border border-slate-200/80 bg-white shadow-card">
+              <div className="border-b border-slate-100 px-4 py-4 sm:px-6 sm:py-5">
+                <h2 className="text-lg font-semibold text-slate-900">Accepted Tasks</h2>
+              </div>
+              <div className="p-4 sm:p-6">
                 {loadingTasks ? (
-                  <div className="text-center py-4">Loading...</div>
-                ) : acceptedTasks.length === 0 ? (
-                  <div className="text-center py-4 text-gray-500">
-                    No accepted tasks. <Link href="/tasks" className="text-primary-600 hover:text-primary-500">Browse tasks</Link>
+                  <div className="flex justify-center py-8">
+                    <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-primary-600" />
                   </div>
+                ) : acceptedTasks.length === 0 ? (
+                  <p className="py-6 text-center text-slate-500">
+                    No accepted tasks.{' '}
+                    <Link href="/tasks" className="font-medium text-primary-600 hover:text-primary-700">
+                      Browse tasks
+                    </Link>
+                  </p>
                 ) : (
-                  <div className="space-y-4">
+                  <ul className="space-y-4">
                     {acceptedTasks.map((task) => (
-                      <div key={task.id} className="border-b border-gray-200 pb-4 last:border-0">
-                        <div className="flex justify-between items-start">
-                          <div className="flex-1">
-                            <Link href={`/tasks/${task.id}`} className="font-medium text-gray-900 hover:text-primary-600">
+                      <li key={task.id} className="border-b border-slate-100 pb-4 last:border-0 last:pb-0">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="min-w-0 flex-1">
+                            <Link
+                              href={`/tasks/${task.id}`}
+                              className="font-medium text-slate-900 transition-colors hover:text-primary-600"
+                            >
                               {task.title}
                             </Link>
-                            <p className="text-sm text-gray-500 mt-1">{task.description.substring(0, 100)}...</p>
-                            <div className="mt-2 flex items-center space-x-2">
-                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getUrgencyColor(task.urgency)}`}>
+                            <p className="mt-0.5 line-clamp-2 text-sm text-slate-500">
+                              {task.description.substring(0, 100)}...
+                            </p>
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                              <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${getUrgencyColor(task.urgency)}`}>
                                 {task.urgency}
                               </span>
-                              <span className="text-sm text-gray-500">{task.rewardPoints} pts</span>
+                              <span className="text-sm text-slate-500">{task.rewardPoints} pts</span>
                             </div>
                           </div>
                           <Link
                             href={`/tasks/${task.id}`}
-                            className="ml-4 inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-primary-700 bg-primary-100 hover:bg-primary-200"
+                            className="shrink-0 rounded-lg bg-primary-50 px-3 py-1.5 text-sm font-medium text-primary-700 transition-colors hover:bg-primary-100 sm:ml-4"
                           >
                             View
                           </Link>
                         </div>
-                      </div>
+                      </li>
                     ))}
-                  </div>
+                  </ul>
                 )}
               </div>
             </div>

@@ -3,31 +3,77 @@
 @tailwind utilities;
 
 :root {
-  --foreground-rgb: 0, 0, 0;
-  --background-start-rgb: 214, 219, 220;
-  --background-end-rgb: 255, 255, 255;
+  --foreground: 15 23 42;
+  --background: 248 250 252;
+  --card: 255 255 255;
+  --primary: 2 132 199;
+  --muted: 100 116 139;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --foreground-rgb: 255, 255, 255;
-    --background-start-rgb: 0, 0, 0;
-    --background-end-rgb: 0, 0, 0;
+    --foreground: 248 250 252;
+    --background: 15 23 42;
+    --card: 30 41 59;
   }
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
-  color: rgb(var(--foreground-rgb));
-  background: linear-gradient(
-      to bottom,
-      transparent,
-      rgb(var(--background-end-rgb))
-    )
-    rgb(var(--background-start-rgb));
+  /* Deep navy background with subtle gradient, light text */
+  @apply antialiased bg-surface-900 text-slate-100;
+  font-feature-settings: "rlig" 1, "calt" 1;
 }
 
+/* Focus ring for accessibility */
+input:focus-visible,
+button:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+a:focus-visible {
+  @apply outline-none ring-2 ring-primary-500 ring-offset-2 ring-offset-white;
+}
+
+/* Animations */
 @layer utilities {
+  .animate-in {
+    animation: fadeInUp 0.5s ease-out forwards;
+  }
+  .animate-stagger-1 { animation-delay: 0.05s; }
+  .animate-stagger-2 { animation-delay: 0.1s; }
+  .animate-stagger-3 { animation-delay: 0.15s; }
+  .animate-stagger-4 { animation-delay: 0.2s; }
+  .animate-stagger-5 { animation-delay: 0.25s; }
   .text-balance {
     text-wrap: balance;
   }
+}
+
+/* Card hover lift */
+.card-hover {
+  @apply transition-all duration-300 ease-out;
+}
+.card-hover:hover {
+  @apply -translate-y-0.5 shadow-card-hover;
+}
+
+/* Button press feedback */
+.btn-active:active {
+  transform: scale(0.98);
+}
+
+/* Hide scrollbar but keep scroll */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }

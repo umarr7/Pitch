@@ -14,6 +14,7 @@ export default function RatingForm({ taskId, receiverId, receiverName, onRated }
   const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [hoverScore, setHoverScore] = useState(0);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,25 +56,31 @@ export default function RatingForm({ taskId, receiverId, receiverName, onRated }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white border border-gray-200 rounded-lg p-4">
-      <h4 className="text-sm font-medium text-gray-900 mb-2">
+    <form
+      onSubmit={handleSubmit}
+      className="animate-fade-in-up rounded-2xl border border-slate-200/80 bg-white p-4 shadow-card sm:p-5"
+    >
+      <h4 className="mb-3 text-sm font-semibold text-slate-900">
         Rate {receiverName}
       </h4>
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded mb-3 text-sm">
+        <div className="mb-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
           {error}
         </div>
       )}
       <div className="mb-3">
-        <div className="flex space-x-1">
+        <div className="flex gap-1">
           {[1, 2, 3, 4, 5].map((value) => (
             <button
               key={value}
               type="button"
               onClick={() => setScore(value)}
-              className={`text-2xl focus:outline-none ${
-                score >= value ? 'text-yellow-400' : 'text-gray-300'
+              onMouseEnter={() => setHoverScore(value)}
+              onMouseLeave={() => setHoverScore(0)}
+              className={`rounded-lg p-1 text-2xl transition-transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 ${
+                (hoverScore || score) >= value ? 'text-amber-400' : 'text-slate-300'
               }`}
+              aria-label={`Rate ${value} star${value > 1 ? 's' : ''}`}
             >
               ★
             </button>
@@ -86,12 +93,12 @@ export default function RatingForm({ taskId, receiverId, receiverName, onRated }
         placeholder="Optional comment..."
         maxLength={500}
         rows={2}
-        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 text-sm mb-3"
+        className="mb-3 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 shadow-sm transition focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
       />
       <button
         type="submit"
         disabled={submitting || score === 0}
-        className="w-full px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+        className="w-full rounded-xl bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed btn-active"
       >
         {submitting ? 'Submitting...' : 'Submit Rating'}
       </button>

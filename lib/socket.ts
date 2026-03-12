@@ -8,15 +8,21 @@ let io: SocketIOServer | null = null;
 export function initializeSocket(server: HTTPServer) {
   io = new SocketIOServer(server, {
     cors: {
-      origin: '*', // Allow all origins for debugging
+      origin: '*',
       methods: ['GET', 'POST'],
     },
-    path: '/api/socket',
+    // Use default path to avoid Next.js /api/* handling; server.ts will skip /socket.io
+    path: '/socket.io',
   });
 
   io.use(async (socket, next) => {
-    console.log('Socket connection attempt:', socket.id);
-    const token = socket.handshake.auth.token;
+    // socket.id may be undefined before handshake completes
+    console.log('[Socket] Connection attempt, auth:', !!socket.handshake.auth?.token);
+    let token = socket.handshake.auth?.token;
+    // Accept raw token or "Bearer <token>"
+    if (typeof token === 'string' && token.startsWith('Bearer ')) {
+      token = token.slice(7);
+    }
     if (!token) {
       console.log('Socket auth error: No token');
       return next(new Error('Authentication error'));
@@ -44,7 +50,14 @@ export function initializeSocket(server: HTTPServer) {
         where: { id: taskId },
       });
 
-      if (task && (task.requesterId === userId || task.acceptorId === userId)) {
+      console.log("JOIN ATTEMPT", {
+        taskId,
+        userId,
+        taskRequester: task?.requesterId,
+        taskAcceptor: task?.acceptorId
+      });
+
+      if (task && (String(task.requesterId) === String(userId) || String(task.acceptorId) === String(userId))) {
         socket.join(`task:${taskId}`);
         socket.emit('joined-task', taskId);
       }
@@ -62,7 +75,7 @@ export function initializeSocket(server: HTTPServer) {
           where: { id: data.taskId },
         });
 
-        if (!task || (task.requesterId !== userId && task.acceptorId !== userId)) {
+        if (!task || (String(task.requesterId) !== String(userId) && String(task.acceptorId) !== String(userId))) {
           socket.emit('error', { message: 'Unauthorized' });
           return;
         }

@@ -19,8 +19,11 @@ export default function Home() {
   }, [user, loading, router]);
 
   return (
-    <div className="flex items-center justify-center min-h-screen">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+    <div className="flex min-h-screen items-center justify-center bg-slate-50">
+      <div className="flex flex-col items-center gap-4">
+        <div className="h-12 w-12 animate-spin rounded-full border-2 border-slate-200 border-t-primary-600" />
+        <p className="text-sm font-medium text-slate-500">Loading...</p>
+      </div>
     </div>
   );
 }

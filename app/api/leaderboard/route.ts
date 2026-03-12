@@ -2,6 +2,24 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { withAuth } from '@/lib/middleware';
 
+type LeaderboardEntry = {
+  rank: number;
+  userId: string;
+  email: string;
+  firstName?: string;
+  lastName?: string;
+  reputation: number;
+  points: number;
+  level: string;
+  department?: {
+    name: string;
+    code: string;
+  } | null;
+  tasksCompleted: number;
+  // Always present (0 when not weekly), so sorting is safe
+  reputationChange: number;
+};
+
 export const GET = withAuth(async (req: NextRequest) => {
   try {
     const searchParams = req.nextUrl.searchParams;
@@ -45,18 +63,19 @@ export const GET = withAuth(async (req: NextRequest) => {
       take: 100,
     });
 
-    // For weekly leaderboard, calculate reputation change
-    let leaderboard = users.map((user, index) => ({
+    // Base leaderboard entries; reputationChange defaults to 0
+    let leaderboard: LeaderboardEntry[] = users.map((user, index) => ({
       rank: index + 1,
       userId: user.id,
       email: user.email,
-      firstName: user.profile?.firstName,
-      lastName: user.profile?.lastName,
+      firstName: user.profile?.firstName || undefined,
+      lastName: user.profile?.lastName || undefined,
       reputation: user.reputation,
       points: user.points,
       level: user.level,
       department: user.department,
       tasksCompleted: user._count.tasksAccepted,
+      reputationChange: 0,
     }));
 
     if (type === 'weekly') {
@@ -85,8 +104,8 @@ export const GET = withAuth(async (req: NextRequest) => {
         reputationChange: changeMap.get(entry.userId) || 0,
       }));
 
-      // Sort by reputation change instead
-      leaderboard.sort((a, b) => (b.reputationChange || 0) - (a.reputationChange || 0));
+      // Sort by reputation change instead (now strongly typed)
+      leaderboard.sort((a, b) => b.reputationChange - a.reputationChange);
       leaderboard = leaderboard.map((entry, index) => ({
         ...entry,
         rank: index + 1,

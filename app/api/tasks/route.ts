@@ -14,7 +14,8 @@ const createTaskSchema = z.object({
   latitude: z.number().optional(),
   longitude: z.number().optional(),
   locationText: z.string().optional(),
-  imageUrl: z.string().url().optional(),
+  // Allow either absolute URLs or relative paths like /uploads/...
+  imageUrl: z.string().optional(),
   expiresAt: z.string().datetime().optional(),
 });
 
