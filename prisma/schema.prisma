@@ -33,6 +33,7 @@ model User {
   reputationHistory ReputationHistory[]
   department    Department? @relation("UserDepartment", fields: [departmentId], references: [id])
   departmentId  String?
+  uploadedPastPapers PastPaper[] @relation("UploaderPastPapers")
   
   @@index([email])
   @@index([reputation])
@@ -174,4 +175,18 @@ model ReputationHistory {
   @@index([userId])
   @@index([createdAt])
   @@index([type])
+}
+
+model PastPaper {
+  id            String   @id @default(cuid())
+  title         String
+  subject       String   // CCN, Database, DSA
+  fileUrl       String?
+  uploaderId    String?
+  uploader      User?    @relation("UploaderPastPapers", fields: [uploaderId], references: [id])
+  isPlaceholder Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  
+  @@index([subject])
+  @@index([uploaderId])
 }

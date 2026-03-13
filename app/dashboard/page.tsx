@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import Navbar from '@/components/Navbar';
+import PastPaperUploadModal from '@/components/PastPaperUploadModal';
 
 interface Task {
   id: string;
@@ -26,12 +27,33 @@ interface Task {
   };
 }
 
+interface PastPaper {
+  id: string;
+  title: string;
+  subject: string;
+  fileUrl: string | null;
+  isPlaceholder: boolean;
+  createdAt: string;
+  uploader: {
+    profile: {
+      firstName: string;
+      lastName: string;
+    };
+  } | null;
+}
+
 export default function DashboardPage() {
   const { user, loading, refreshUser } = useAuth();
   const router = useRouter();
   const [myTasks, setMyTasks] = useState<Task[]>([]);
   const [acceptedTasks, setAcceptedTasks] = useState<Task[]>([]);
   const [loadingTasks, setLoadingTasks] = useState(true);
+
+  // Past Papers State
+  const [pastPapers, setPastPapers] = useState<PastPaper[]>([]);
+  const [paperFilter, setPaperFilter] = useState<'All' | 'CCN' | 'Database' | 'DSA'>('All');
+  const [loadingPapers, setLoadingPapers] = useState(true);
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -45,11 +67,12 @@ export default function DashboardPage() {
         if (refreshUser) {
           await refreshUser();
         }
-        await fetchTasks();
+        await Promise.all([fetchTasks(), fetchPastPapers()]);
       };
       loadDashboard();
     }
-  }, [user?.id, loading, router, refreshUser]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   const fetchTasks = async () => {
     try {
@@ -78,6 +101,33 @@ export default function DashboardPage() {
       setLoadingTasks(false);
     }
   };
+
+  const fetchPastPapers = async () => {
+    setLoadingPapers(true);
+    try {
+      const token = localStorage.getItem('token');
+      const url = paperFilter === 'All' ? '/api/pastpapers' : `/api/pastpapers?subject=${paperFilter}`;
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setPastPapers(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch past papers:', error);
+    } finally {
+      setLoadingPapers(false);
+    }
+  };
+
+  useEffect(() => {
+    if (user?.id) {
+      fetchPastPapers();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paperFilter, user?.id]);
 
   const getLevelColor = (level: string) => {
     switch (level) {
@@ -252,8 +302,91 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
+
+          {/* Past Papers Section */}
+          <div className="mt-8 animate-fade-in-up rounded-2xl border border-slate-200/80 bg-white shadow-card">
+            <div className="border-b border-slate-100 px-4 py-4 sm:flex sm:items-center sm:justify-between sm:px-6 sm:py-5">
+              <h2 className="text-lg font-semibold text-slate-900">Past Papers</h2>
+              <div className="mt-3 flex flex-col gap-3 sm:mt-0 sm:flex-row sm:items-center">
+                <select
+                  value={paperFilter}
+                  onChange={(e) => setPaperFilter(e.target.value as any)}
+                  className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                >
+                  <option value="All">All Subjects</option>
+                  <option value="CCN">CCN</option>
+                  <option value="Database">Database</option>
+                  <option value="DSA">DSA</option>
+                </select>
+                <button
+                  onClick={() => setIsUploadModalOpen(true)}
+                  className="rounded-xl bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-soft transition-colors hover:bg-primary-700 btn-active"
+                >
+                  + Upload Paper
+                </button>
+              </div>
+            </div>
+            <div className="p-4 sm:p-6">
+              {loadingPapers ? (
+                <div className="flex justify-center py-8">
+                  <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-primary-600" />
+                </div>
+              ) : pastPapers.length === 0 ? (
+                <p className="py-6 text-center text-slate-500">
+                  No past papers available for this subject.{' '}
+                  <button onClick={() => setIsUploadModalOpen(true)} className="font-medium text-primary-600 hover:text-primary-700">
+                    Upload one now
+                  </button>
+                </p>
+              ) : (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {pastPapers.map((paper) => (
+                    <div key={paper.id} className="card-hover rounded-xl border border-slate-200/80 p-4 transition-all">
+                      <div className="flex flex-col h-full">
+                        <div className="flex items-start justify-between">
+                          <h3 className="font-semibold text-slate-900 line-clamp-2">{paper.title}</h3>
+                          <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-800">
+                            {paper.subject}
+                          </span>
+                        </div>
+                        <div className="mt-4 mt-auto">
+                          <p className="text-xs text-slate-500 mb-3">
+                            Added by {paper.uploader?.profile.firstName || 'System'}
+                          </p>
+                          <button
+                            onClick={() => {
+                              if (paper.isPlaceholder || !paper.fileUrl) {
+                                alert('Coming soon');
+                              } else {
+                                window.open(paper.fileUrl, '_blank');
+                              }
+                            }}
+                            className="inline-flex w-full justify-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
+                          >
+                            {paper.isPlaceholder ? 'Coming Soon' : 'View Paper'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
         </div>
       </div>
+      
+      {isUploadModalOpen && (
+        <PastPaperUploadModal 
+          isOpen={isUploadModalOpen} 
+          onClose={() => setIsUploadModalOpen(false)} 
+          onSuccess={() => {
+            setIsUploadModalOpen(false);
+            fetchPastPapers();
+          }}
+        />
+      )}
     </div>
   );
 }
